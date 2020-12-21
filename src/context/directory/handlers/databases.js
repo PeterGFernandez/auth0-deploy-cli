@@ -8,6 +8,7 @@ import {
   existsMustBeDir,
   dumpJSON,
   loadJSON,
+  getFiles,
   sanitize,
   mapClientID2NameSorted
 } from '../../../utils';
@@ -36,17 +37,30 @@ function getDatabase(folder, mappings) {
       ...metaData.options,
       // customScripts option only written if there are scripts
       ...(metaData.customScripts && {
-        customScripts: metaData.customScripts || {}
+        customScripts: metaData.customScripts
       })
     }
   };
 
-  Object.keys(database.options.customScripts).forEach((key) => {
+  Object.keys(database.options.customScripts || {}).forEach((key) => {
     const file = path.join(folder, database.options.customScripts[key]);
+    const files = getFiles(folder, [ '.js' ]);
+
     if (!constants.DATABASE_SCRIPTS.includes(key)) {
       log.warn('Skipping invalid database script file: ' + file);
     } else {
-      database.options.customScripts[key] = loadFile(file, mappings);
+      try {
+        database.options.customScripts[key] = loadFile(file, mappings);
+      } catch (e) {
+        /* Revert to standard processing for unloadable file */
+        files.forEach((_file) => {
+          const { name } = path.parse(_file);
+
+          if (name === key) {
+            database.options.customScripts[name] = loadFile(_file, mappings);
+          }
+        });
+      }
     }
   });
 
